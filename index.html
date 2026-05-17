@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instagramキャプション生成ツール</title>
+
+<style>
+*{
+  box-sizing:border-box;
+}
+
+body{
+  margin:0;
+  padding:16px;
+  background:#f7f3ee;
+  color:#222;
+  font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue","Noto Sans JP",sans-serif;
+}
+
+h1{
+  font-size:22px;
+  margin:0 0 16px;
+}
+
+.card{
+  background:#fff;
+  border-radius:16px;
+  padding:16px;
+  margin-bottom:16px;
+  border:1px solid #e6ded4;
+}
+
+label{
+  display:block;
+  margin-top:14px;
+  margin-bottom:6px;
+  font-weight:700;
+}
+
+small{
+  color:#666;
+}
+
+input,textarea,button{
+  width:100%;
+  font-size:16px;
+  font-family:inherit;
+}
+
+input,textarea{
+  padding:10px;
+  border-radius:12px;
+  border:1px solid #ddd;
+}
+
+textarea{
+  min-height:180px;
+}
+
+textarea[readonly]{
+  background:#f5f5f5;
+  color:#333;
+}
+
+button{
+  margin-top:10px;
+  padding:12px;
+  border:none;
+  border-radius:999px;
+  background:#2f2a26;
+  color:#fff;
+  font-weight:700;
+}
+
+.secondary{
+  background:#efe6db;
+  color:#2f2a26;
+}
+
+.danger{
+  background:#f4dddd;
+  color:#7a2020;
+}
+
+.name-row{
+  display:flex;
+  gap:8px;
+  margin-bottom:8px;
+}
+
+.name-input{
+  flex:1;
+}
+
+.delete-btn{
+  width:42px;
+  min-width:42px;
+  background:#f4dddd;
+  color:#7a2020;
+  margin-top:0;
+}
+
+.tag-input{
+  margin-bottom:8px;
+}
+
+.notice{
+  margin-top:10px;
+  padding:10px;
+  background:#fff7e8;
+  border-radius:12px;
+  display:none;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Instagramキャプション生成ツール</h1>
+
+<div class="card">
+
+<label>1. キャプションテンプレート</label>
+<small>{names} の場所に名前一覧が入ります。初期状態はロックされています。</small>
+
+<button class="secondary" id="editTemplateButton" onclick="unlockTemplate()">テンプレートを編集</button>
+<button class="secondary" id="lockTemplateButton" onclick="lockTemplate()" style="display:none;">編集を終了してロック</button>
+
+<textarea id="template" readonly>本日のご来店は🐶🐱
+
+{names}
+
+みんなシャンプー、トリミングお疲れ様でした!!
+とっても可愛くカットさせていただきました!
+お写真に載ってない子もご来店頂きありがとうございます!
+またのご来店を楽しみにお待ちしてます♪</textarea>
+
+<label>2. 名前の前につける絵文字</label>
+<input id="emoji" value="🐶">
+
+<label>3. ペットの名前</label>
+<small>初期表示10件・追加可能。名前には自動で「ちゃん」がつきます。</small>
+
+<div id="nameContainer"></div>
+
+<button class="secondary" onclick="addNameField()">名前入力欄を追加</button>
+
+<label>4. タグ</label>
+<small>初期状態は空欄です。入力されているタグだけ、生成結果の末尾に追加されます。</small>
+
+<input class="tag-input" id="tag1" value="" placeholder="タグ1 例：#ペットの専門店">
+<input class="tag-input" id="tag2" value="" placeholder="タグ2">
+<input class="tag-input" id="tag3" value="" placeholder="タグ3">
+<input class="tag-input" id="tag4" value="" placeholder="タグ4">
+<input class="tag-input" id="tag5" value="" placeholder="タグ5">
+
+<button onclick="generateCaption()">生成してコピー</button>
+
+<button class="secondary" onclick="saveData()">入力内容を保存</button>
+
+<button class="danger" onclick="clearNames()">名前だけクリア</button>
+
+</div>
+
+<div class="card">
+
+<label>生成結果</label>
+
+<textarea id="output"></textarea>
+
+<div id="notice" class="notice">
+iPhoneで自動コピーできない場合があります。生成結果を長押ししてコピーしてください。
+</div>
+
+</div>
+
+<script>
+
+function unlockTemplate(){
+  var template=document.getElementById("template");
+  template.readOnly=false;
+  document.getElementById("editTemplateButton").style.display="none";
+  document.getElementById("lockTemplateButton").style.display="block";
+  template.focus();
+}
+
+function lockTemplate(){
+  var template=document.getElementById("template");
+  template.readOnly=true;
+  document.getElementById("editTemplateButton").style.display="block";
+  document.getElementById("lockTemplateButton").style.display="none";
+}
+
+function addNameField(value){
+
+  var container=document.getElementById("nameContainer");
+
+  var row=document.createElement("div");
+  row.className="name-row";
+
+  var input=document.createElement("input");
+  input.type="text";
+  input.className="name-input";
+  input.value=value || "";
+  input.placeholder="ペットの名前 " + (document.querySelectorAll(".name-input").length + 1);
+
+  var del=document.createElement("button");
+  del.type="button";
+  del.className="delete-btn";
+  del.innerHTML="×";
+
+  del.onclick=function(){
+    container.removeChild(row);
+    updateNamePlaceholders();
+  };
+
+  row.appendChild(input);
+  row.appendChild(del);
+
+  container.appendChild(row);
+
+  updateNamePlaceholders();
+}
+
+function updateNamePlaceholders(){
+  var inputs=document.querySelectorAll(".name-input");
+  for(var i=0;i<inputs.length;i++){
+    inputs[i].placeholder="ペットの名前 " + (i+1);
+  }
+}
+
+function ensureAtLeast10NameFields(){
+  while(document.querySelectorAll(".name-input").length < 10){
+    addNameField("");
+  }
+}
+
+function ensureChan(name){
+  if(name.endsWith("ちゃん")){
+    return name;
+  }
+  return name + "ちゃん";
+}
+
+function getTags(){
+  var tags=[];
+  for(var i=1;i<=5;i++){
+    var tag=document.getElementById("tag"+i).value.trim();
+    if(tag){
+      tags.push(tag);
+    }
+  }
+  return tags;
+}
+
+function generateCaption(){
+
+  var emoji=document.getElementById("emoji").value.trim();
+  var template=document.getElementById("template").value;
+
+  var inputs=document.querySelectorAll(".name-input");
+
+  var lines=[];
+
+  for(var i=0;i<inputs.length;i++){
+
+    var value=inputs[i].value.trim();
+
+    if(value){
+      lines.push(emoji + ensureChan(value));
+    }
+  }
+
+  var names=lines.join("\n");
+
+  var result=template.replace("{names}",names);
+
+  var tags=getTags();
+
+  if(tags.length){
+    result=result + "\n\n" + tags.join(" ");
+  }
+
+  var output=document.getElementById("output");
+
+  output.value=result;
+
+  tryCopy(result);
+}
+
+function tryCopy(text){
+
+  var notice=document.getElementById("notice");
+
+  notice.style.display="none";
+
+  if(navigator.clipboard){
+
+    navigator.clipboard.writeText(text)
+    .then(function(){
+      alert("生成してコピーしました");
+    })
+    .catch(function(){
+      fallbackCopy();
+    });
+
+  }else{
+    fallbackCopy();
+  }
+
+  function fallbackCopy(){
+
+    var output=document.getElementById("output");
+
+    output.focus();
+    output.select();
+
+    notice.style.display="block";
+
+    alert("生成しました。長押ししてコピーしてください");
+  }
+}
+
+function saveData(){
+
+  var inputs=document.querySelectorAll(".name-input");
+
+  var names=[];
+
+  for(var i=0;i<inputs.length;i++){
+    names.push(inputs[i].value);
+  }
+
+  var data={
+    template:document.getElementById("template").value,
+    emoji:document.getElementById("emoji").value,
+    names:names,
+    tags:getTags()
+  };
+
+  localStorage.setItem("ig_caption_data",JSON.stringify(data));
+
+  alert("保存しました");
+}
+
+function loadData(){
+
+  lockTemplate();
+
+  try{
+
+    var raw=localStorage.getItem("ig_caption_data");
+
+    if(raw){
+
+      var data=JSON.parse(raw);
+
+      if(data.template){
+        document.getElementById("template").value=data.template;
+      }
+
+      if(data.emoji){
+        document.getElementById("emoji").value=data.emoji;
+      }
+
+      if(data.tags && data.tags.length){
+        for(var t=0;t<5;t++){
+          document.getElementById("tag"+(t+1)).value=data.tags[t] || "";
+        }
+      }
+
+      if(data.names && data.names.length){
+
+        for(var i=0;i<data.names.length;i++){
+          addNameField(data.names[i]);
+        }
+
+        ensureAtLeast10NameFields();
+
+        lockTemplate();
+
+        return;
+      }
+    }
+
+  }catch(e){}
+
+  ensureAtLeast10NameFields();
+
+  lockTemplate();
+}
+
+function clearNames(){
+
+  var inputs=document.querySelectorAll(".name-input");
+
+  for(var i=0;i<inputs.length;i++){
+    inputs[i].value="";
+  }
+
+  alert("名前をクリアしました");
+}
+
+window.onload=function(){
+  loadData();
+};
+
+</script>
+
+</body>
+</html>
